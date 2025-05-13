@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Romantic Heart Lines</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: #000;
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
+
+        canvas {
+            background: transparent;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            touch-action: none;
+        }
+
+        #space {
+            z-index: -1;
+        }
+
+        @media (max-width: 768px) {
+            canvas {
+                touch-action: none;
+                -webkit-touch-callout: none;
+                -webkit-user-select: none;
+                -khtml-user-select: none;
+                -moz-user-select: none;
+                -ms-user-select: none;
+                user-select: none;
+                -webkit-tap-highlight-color: transparent;
+            }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="space"></canvas>
+    <canvas id="heartCanvas"></canvas>
+    <script>
+        // Responsive canvas setup
+        function setupCanvas(canvas) {
+            const dpr = window.devicePixelRatio || 1;
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            return dpr;
+        }
+
+        const spaceCanvas = document.getElementById('space');
+        const spaceCtx = spaceCanvas.getContext('2d');
+        let spaceDpr = setupCanvas(spaceCanvas);
+        spaceCtx.scale(spaceDpr, spaceDpr);
+
+        class Star {
+            constructor() {
+                this.reset();
+            }
+
+            reset() {
+                this.x = Math.random() * (spaceCanvas.width / spaceDpr);
+                this.y = Math.random() * (spaceCanvas.height / spaceDpr);
+                this.size = Math.random() * 1.5;
+                this.speed = 0.1 + Math.random() * 0.3;
+                this.brightness = Math.random();
+                this.color = `hsla(${350 + Math.random() * 20}, 80%, 80%, ${0.1 + Math.random() * 0.2})`;
+            }
+
+            update() {
+                this.brightness = 0.5 + Math.sin(Date.now() * this.speed * 0.001) * 0.3;
+                this.y += this.speed * 0.2;
+                if (this.y > spaceCanvas.height / spaceDpr) this.reset();
+            }
+
+            draw() {
+                spaceCtx.beginPath();
+                spaceCtx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                spaceCtx.fillStyle = this.color;
+                spaceCtx.fill();
+            }
+        }
+
+        const stars = Array(200).fill().map(() => new Star());
+
+        function animateSpace() {
+            const width = spaceCanvas.width / spaceDpr;
+            const height = spaceCanvas.height / spaceDpr;
+
+            spaceCtx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            spaceCtx.fillRect(0, 0, width, height);
+
+            const gradient = spaceCtx.createRadialGradient(
+                width/2, height/2, 0,
+                width/2, height/2, width/2
+            );
+            gradient.addColorStop(0, 'rgba(50, 0, 10, 0.05)');
+            gradient.addColorStop(0.5, 'rgba(30, 0, 5, 0.03)');
+            gradient.addColorStop(1, 'rgba(10, 0, 2, 0)');
+            spaceCtx.fillStyle = gradient;
+            spaceCtx.fillRect(0, 0, width, height);
+
+            stars.forEach(star => {
+                star.update();
+                star.draw();
+            });
+
+            requestAnimationFrame(animateSpace);
+        }
+
+        const canvas = document.getElementById('heartCanvas');
+        const ctx = canvas.getContext('2d', {
+            alpha: true
+        });
+        let dpr = setupCanvas(canvas);
+        ctx.scale(dpr, dpr);
+
+        function heartX(t) {
+            return 16 * Math.pow(Math.sin(t), 3);
+        }
+
+        function heartY(t) {
+            return -(13 * Math.cos(t) - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t));
+        }
+
+        let animationStartTime = 0;
+
+        function calculateOptimalScale() {
+            const width = canvas.width / dpr;
+            const height = canvas.height / dpr;
+            const minDimension = Math.min(width, height);
+            
+            // Calculate the heart's natural size based on the parametric equations
+            let minX = Infinity, maxX = -Infinity;
+            let minY = Infinity, maxY = -Infinity;
+            
+            for (let t = 0; t < Math.PI * 2; t += 0.01) {
+                const x = heartX(t);
+                const y = heartY(t);
+                minX = Math.min(minX, x);
+                maxX = Math.max(maxX, x);
+                minY = Math.min(minY, y);
+                maxY = Math.max(maxY, y);
+            }
+            
+            const heartWidth = maxX - minX;
+            const heartHeight = maxY - minY;
+            
+            // Calculate the scale based on the viewport size
+            // Using a consistent percentage of the minimum dimension
+            const targetSize = minDimension * 0.85; // Using 85% of the smallest screen dimension
+            const scale = targetSize / Math.max(heartWidth, heartHeight);
+            
+            return scale;
+        }
+
+        class Particle {
+            constructor(scale, delay = 0) {
+                this.scale = scale;
+                this.delay = delay;
+                this.active = false;
+                this.reset(true);
+                this.history = [];
+                this.maxHistory = Math.floor(20 + Math.random() * 12);
+                this.baseHue = 350 + Math.random() * 20;
+                this.glow = 9 + Math.random() * 8;
+                this.danceMode = Math.floor(Math.random() * 4);
+                this.lifespan = 0;
+                this.maxLifespan = 100 + Math.random() * 80;
+                this.fadeState = 1;
+                this.lastX = 0;
+                this.lastY = 0;
+            }
+
+            reset(isInitial = false) {
+                const width = canvas.width / dpr;
+                const height = canvas.height / dpr;
+                
+                this.t = Math.random() * Math.PI * 2;
+                const heartScale = this.scale;
+                const randomOffset = (95 + Math.random() * 75) * (width / 1920);
+                
+                const centerOffsetY = window.heartConfig ? window.heartConfig.centerOffsetY : 0;
+                const baseX = heartX(this.t) * heartScale + width/2;
+                const baseY = heartY(this.t) * heartScale + height/2 + centerOffsetY;
+                
+                const angle = Math.random() * Math.PI * 2;
+                this.x = baseX + Math.cos(angle) * randomOffset;
+                this.y = baseY + Math.sin(angle) * randomOffset;
+                
+                this.speed = 0.003 + Math.random() * 0.005;
+                this.baseSpeed = this.speed;
+                this.phase = Math.random() * Math.PI * 2;
+                this.size = (0.45 + Math.random() * 0.35) * (width / 1920);
+                this.amplitude = (1.4 + Math.random() * 3.5) * (width / 1920);
+                this.danceSpeed = 0.004 + Math.random() * 0.008;
+                this.history = [];
+                this.lifespan = 0;
+                this.fadeState = 1;
+                
+                if (!isInitial) {
+                    this.active = true;
+                    this.delay = performance.now();
+                }
+
+                this.baseHue = 350 + Math.random() * 20;
+                this.saturation = 92 + Math.random() * 8;
+                this.lightness = 50 + Math.random() * 30;
+                this.maxHistory = Math.floor(20 + Math.random() * 12);
+                this.glow = 9 + Math.random() * 8;
+            }
+
+            update(time) {
+                const width = canvas.width / dpr;
+                const height = canvas.height / dpr;
+
+                if (!this.active && time > this.delay) {
+                    this.active = true;
+                }
+
+                if (this.active) {
+                    // Normal heart animation
+                    this.updateNormal(time, width, height);
+
+                    this.history.push({
+                        x: this.x,
+                        y: this.y,
+                        phase: this.phase,
+                        glow: this.glow,
+                        size: this.size,
+                        baseHue: this.baseHue,
+                        saturation: this.saturation,
+                        lightness: this.lightness,
+                        fadeState: this.fadeState
+                    });
+
+                    if (this.history.length > this.maxHistory) {
+                        this.history.shift();
+                    }
+                }
+            }
+
+            updateNormal(time, width, height) {
+                this.phase += this.danceSpeed;
+                let wobbleX = 0, wobbleY = 0;
+                
+                const timeScale = this.lifespan * 0.01;
+                switch(this.danceMode) {
+                    case 0:
+                        wobbleX = Math.cos(this.phase) * Math.sin(timeScale * 0.5) * this.amplitude;
+                        wobbleY = Math.sin(this.phase) * Math.cos(timeScale * 0.7) * this.amplitude;
+                        break;
+                    case 1:
+                        wobbleX = Math.sin(this.phase * 1.5) * Math.cos(timeScale * 0.3) * this.amplitude;
+                        wobbleY = Math.cos(this.phase * 2) * Math.sin(timeScale * 0.4) * this.amplitude;
+                        break;
+                    case 2:
+                        wobbleX = Math.sin(this.phase + timeScale) * this.amplitude;
+                        wobbleY = Math.cos(this.phase * 0.5 + timeScale * 0.8) * this.amplitude;
+                        break;
+                    case 3:
+                        wobbleX = Math.sin(this.phase * 2 + timeScale * 0.5) * Math.cos(timeScale * 0.3) * this.amplitude;
+                        wobbleY = Math.cos(this.phase * 1.5 + timeScale * 0.6) * Math.sin(timeScale * 0.4) * this.amplitude;
+                        break;
+                }
+
+                const centerOffsetY = window.heartConfig ? window.heartConfig.centerOffsetY : 0;
+                const targetX = heartX(this.t) * this.scale + width/2 + wobbleX;
+                const targetY = heartY(this.t) * this.scale + height/2 + centerOffsetY + wobbleY;
+
+                const dx = targetX - this.x;
+                const dy = targetY - this.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                const speed = 5 * (width / 1920);
+                this.x += (dx / distance) * speed;
+                this.y += (dy / distance) * speed;
+
+                this.t += this.speed * (0.8 + Math.sin(this.phase) * 0.4);
+                if (this.t > Math.PI * 2) this.t = 0;
+            }
+
+            draw() {
+                if (!this.active || this.history.length < 2) return;
+
+                ctx.beginPath();
+                ctx.moveTo(this.history[0].x, this.history[0].y);
+                
+                for (let i = 1; i < this.history.length; i++) {
+                    const p0 = this.history[i-1];
+                    const p1 = this.history[i];
+                    const xc = (p0.x + p1.x) * 0.5;
+                    const yc = (p0.y + p1.y) * 0.5;
+                    ctx.quadraticCurveTo(p0.x, p0.y, xc, yc);
+                }
+
+                const gradient = ctx.createLinearGradient(
+                    this.history[0].x, this.history[0].y,
+                    this.x, this.y
+                );
+                
+                const startAlpha = 0.14 * this.fadeState;
+                const endAlpha = 0.45 * this.fadeState;
+                
+                gradient.addColorStop(0, `hsla(${this.baseHue}, ${this.saturation}%, ${this.lightness}%, ${startAlpha})`);
+                gradient.addColorStop(1, `hsla(${this.baseHue}, ${this.saturation}%, ${this.lightness}%, ${endAlpha})`);
+                
+                ctx.strokeStyle = gradient;
+                ctx.lineWidth = (this.size + 1) * (0.75 + Math.sin(this.phase) * 0.2);
+                ctx.lineCap = 'round';
+                ctx.stroke();
+
+                ctx.shadowColor = `hsla(${this.baseHue}, ${this.saturation}%, ${this.lightness}%, ${endAlpha})`;
+                ctx.shadowBlur = this.glow * this.fadeState;
+                
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size * (1.2 + Math.sin(this.phase) * 0.25), 0, Math.PI * 2);
+                ctx.fillStyle = `hsla(${this.baseHue}, ${this.saturation}%, ${this.lightness}%, ${endAlpha * 1.2})`;
+                ctx.fill();
+            }
+        }
+
+        const particles = [];
+        const numParticles = 600;
+        let extraParticles = [];
+        let isShaking = false;
+        let shakeIntensity = 0;
+        let lastShakeTime = 0;
+        let isPressed = false;
+        let lastParticleBurst = 0;
+        let backgroundOpacity = 0;
+        const totalSpawnDuration = 4000;
+        const spawnInterval = totalSpawnDuration / numParticles;
+
+        function startShakeEffect() {
+            isPressed = true;
+            isShaking = true;
+            shakeIntensity = 20;
+            lastShakeTime = performance.now();
+            addParticleBurst();
+        }
+
+        function stopShakeEffect() {
+            isPressed = false;
+            // Let the shake gradually fade out
+            setTimeout(() => {
+                if (!isPressed) {
+                    isShaking = false;
+                    shakeIntensity = 0;
+                }
+            }, 500);
+        }
+
+        function addParticleBurst() {
+            const currentTime = performance.now();
+            // Add new particles every 100ms while pressed
+            if (currentTime - lastParticleBurst < 100) return;
+            
+            lastParticleBurst = currentTime;
+            
+            // Add burst of particles
+            const scale = window.heartConfig.scale;
+            const burstCount = 50; // Smaller continuous bursts
+            
+            // Remove old particles if we have too many
+            if (extraParticles.length > 500) {
+                extraParticles = extraParticles.slice(-400);
+            }
+            
+            for (let i = 0; i < burstCount; i++) {
+                const particle = new Particle(scale, 0);
+                particle.active = true;
+                // Make these particles move faster and glow more
+                particle.speed *= 1.5;
+                particle.glow *= 1.5;
+                particle.size *= 1.2;
+                // Add some extra randomness to the movement
+                particle.amplitude *= 1.5;
+                extraParticles.push(particle);
+            }
+        }
+
+        function updateShake(time) {
+            if (!isShaking) return { offsetX: 0, offsetY: 0 };
+
+            if (isPressed) {
+                // Maintain shake intensity while pressed
+                shakeIntensity = Math.min(shakeIntensity + 0.5, 20);
+                addParticleBurst();
+            } else {
+                // Decrease shake intensity when released
+                shakeIntensity *= 0.9;
+                if (shakeIntensity < 0.1) {
+                    isShaking = false;
+                    return { offsetX: 0, offsetY: 0 };
+                }
+            }
+            
+            // Create random shake offset
+            const offsetX = (Math.random() - 0.5) * shakeIntensity;
+            const offsetY = (Math.random() - 0.5) * shakeIntensity;
+
+            return { offsetX, offsetY };
+        }
+
+        function updateBackground(ctx, width, height) {
+            // Update background opacity
+            if (isPressed && backgroundOpacity < 1) {
+                backgroundOpacity = Math.min(1, backgroundOpacity + 0.05);
+            } else if (!isPressed && backgroundOpacity > 0) {
+                backgroundOpacity = Math.max(0, backgroundOpacity - 0.03);
+            }
+
+            if (backgroundOpacity > 0) {
+                // Create a radial gradient for a more dynamic effect
+                const gradient = ctx.createRadialGradient(
+                    width/2, height/2, 0,
+                    width/2, height/2, Math.max(width, height)
+                );
+                
+                // Deep red center fading to darker red
+                gradient.addColorStop(0, `rgba(255, 0, 50, ${0.3 * backgroundOpacity})`);
+                gradient.addColorStop(0.5, `rgba(180, 0, 35, ${0.2 * backgroundOpacity})`);
+                gradient.addColorStop(1, `rgba(100, 0, 20, ${0.1 * backgroundOpacity})`);
+                
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, width, height);
+            }
+        }
+
+        function initParticles() {
+            particles.length = 0;
+            extraParticles = [];
+            const scale = calculateOptimalScale();
+            
+            // Calculate vertical offset based on viewport dimensions
+            const width = canvas.width / dpr;
+            const height = canvas.height / dpr;
+            const aspectRatio = width / height;
+            
+            // Adjust vertical position more consistently
+            const verticalOffset = aspectRatio < 1 
+                ? -height * 0.08  // More offset for portrait (mobile)
+                : -height * 0.02; // Slight offset for landscape
+            
+            window.heartConfig = {
+                scale: scale,
+                centerOffsetY: verticalOffset
+            };
+            
+            // Batch create particles for better performance
+            const batchSize = 50;
+            for (let i = 0; i < numParticles; i += batchSize) {
+                setTimeout(() => {
+                    for (let j = 0; j < batchSize && (i + j) < numParticles; j++) {
+                        particles.push(new Particle(scale, (i + j) * spawnInterval));
+                    }
+                }, 0);
+            }
+        }
+
+        function animate(time) {
+            if (!animationStartTime) {
+                animationStartTime = time;
+            }
+
+            const width = canvas.width / dpr;
+            const height = canvas.height / dpr;
+
+            ctx.clearRect(0, 0, width, height);
+            
+            // Update and draw background
+            updateBackground(ctx, width, height);
+            
+            // Optimized motion blur with adjusted alpha for red background
+            ctx.fillStyle = `rgba(0, 0, 0, ${isPressed ? 0.1 : 0.2})`;
+            ctx.fillRect(0, 0, width, height);
+
+            // Get shake offset
+            const { offsetX, offsetY } = updateShake(time);
+            
+            // Apply shake transform
+            ctx.save();
+            ctx.translate(offsetX, offsetY);
+
+            // Batch process regular particles
+            const len = particles.length;
+            for (let i = 0; i < len; i++) {
+                const particle = particles[i];
+                if (i % 2 === 0) {
+                    particle.update(time);
+                }
+                particle.draw();
+            }
+
+            // Process extra particles
+            for (let i = 0; i < extraParticles.length; i++) {
+                extraParticles[i].update(time);
+                extraParticles[i].draw();
+            }
+
+            ctx.restore();
+            requestAnimationFrame(animate);
+        }
+
+        function handleResize() {
+            spaceDpr = setupCanvas(spaceCanvas);
+            spaceCtx.scale(spaceDpr, spaceDpr);
+            stars.forEach(star => star.reset());
+
+            dpr = setupCanvas(canvas);
+            ctx.scale(dpr, dpr);
+            initParticles();
+        }
+
+        // Event listeners
+        window.addEventListener('resize', handleResize);
+
+        // Add interaction listeners for mouse
+        canvas.addEventListener('mousedown', startShakeEffect);
+        canvas.addEventListener('mouseup', stopShakeEffect);
+        canvas.addEventListener('mouseleave', stopShakeEffect);
+
+        // Add interaction listeners for touch
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            startShakeEffect();
+        });
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            stopShakeEffect();
+        });
+        canvas.addEventListener('touchcancel', (e) => {
+            e.preventDefault();
+            stopShakeEffect();
+        });
+
+        // Initialize
+        initParticles();
+        animate(0);
+        animateSpace();
+    </script>
+</body>
+</html> 
