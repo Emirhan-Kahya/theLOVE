@@ -171,8 +171,174 @@
             return scale;
         }
 
+        class Particle {
+            constructor(scale, delay = 0) {
+                this.scale = scale;
+                this.delay = delay;
+                this.active = false;
+                this.reset(true);
+                this.history = [];
+                this.maxHistory = Math.floor(20 + Math.random() * 12);
+                this.baseHue = 350 + Math.random() * 20;
+                this.glow = 9 + Math.random() * 8;
+                this.danceMode = Math.floor(Math.random() * 4);
+                this.lifespan = 0;
+                this.maxLifespan = 100 + Math.random() * 80;
+                this.fadeState = 1;
+                this.lastX = 0;
+                this.lastY = 0;
+            }
+
+            reset(isInitial = false) {
+                const width = canvas.width / dpr;
+                const height = canvas.height / dpr;
+                
+                this.t = Math.random() * Math.PI * 2;
+                const heartScale = this.scale;
+                const randomOffset = (95 + Math.random() * 75) * (width / 1920);
+                
+                const centerOffsetY = window.heartConfig ? window.heartConfig.centerOffsetY : 0;
+                const baseX = heartX(this.t) * heartScale + width/2;
+                const baseY = heartY(this.t) * heartScale + height/2 + centerOffsetY;
+                
+                const angle = Math.random() * Math.PI * 2;
+                this.x = baseX + Math.cos(angle) * randomOffset;
+                this.y = baseY + Math.sin(angle) * randomOffset;
+                
+                this.speed = 0.003 + Math.random() * 0.005;
+                this.baseSpeed = this.speed;
+                this.phase = Math.random() * Math.PI * 2;
+                this.size = (0.45 + Math.random() * 0.35) * (width / 1920);
+                this.amplitude = (1.4 + Math.random() * 3.5) * (width / 1920);
+                this.danceSpeed = 0.004 + Math.random() * 0.008;
+                this.history = [];
+                this.lifespan = 0;
+                this.fadeState = 1;
+                
+                if (!isInitial) {
+                    this.active = true;
+                    this.delay = performance.now();
+                }
+
+                this.baseHue = 350 + Math.random() * 20;
+                this.saturation = 92 + Math.random() * 8;
+                this.lightness = 50 + Math.random() * 30;
+                this.maxHistory = Math.floor(20 + Math.random() * 12);
+                this.glow = 9 + Math.random() * 8;
+            }
+
+            update(time) {
+                const width = canvas.width / dpr;
+                const height = canvas.height / dpr;
+
+                if (!this.active && time > this.delay) {
+                    this.active = true;
+                }
+
+                if (this.active) {
+                    // Normal heart animation
+                    this.updateNormal(time, width, height);
+
+                    this.history.push({
+                        x: this.x,
+                        y: this.y,
+                        phase: this.phase,
+                        glow: this.glow,
+                        size: this.size,
+                        baseHue: this.baseHue,
+                        saturation: this.saturation,
+                        lightness: this.lightness,
+                        fadeState: this.fadeState
+                    });
+
+                    if (this.history.length > this.maxHistory) {
+                        this.history.shift();
+                    }
+                }
+            }
+
+            updateNormal(time, width, height) {
+                this.phase += this.danceSpeed;
+                let wobbleX = 0, wobbleY = 0;
+                
+                const timeScale = this.lifespan * 0.01;
+                switch(this.danceMode) {
+                    case 0:
+                        wobbleX = Math.cos(this.phase) * Math.sin(timeScale * 0.5) * this.amplitude;
+                        wobbleY = Math.sin(this.phase) * Math.cos(timeScale * 0.7) * this.amplitude;
+                        break;
+                    case 1:
+                        wobbleX = Math.sin(this.phase * 1.5) * Math.cos(timeScale * 0.3) * this.amplitude;
+                        wobbleY = Math.cos(this.phase * 2) * Math.sin(timeScale * 0.4) * this.amplitude;
+                        break;
+                    case 2:
+                        wobbleX = Math.sin(this.phase + timeScale) * this.amplitude;
+                        wobbleY = Math.cos(this.phase * 0.5 + timeScale * 0.8) * this.amplitude;
+                        break;
+                    case 3:
+                        wobbleX = Math.sin(this.phase * 2 + timeScale * 0.5) * Math.cos(timeScale * 0.3) * this.amplitude;
+                        wobbleY = Math.cos(this.phase * 1.5 + timeScale * 0.6) * Math.sin(timeScale * 0.4) * this.amplitude;
+                        break;
+                }
+
+                const centerOffsetY = window.heartConfig ? window.heartConfig.centerOffsetY : 0;
+                const targetX = heartX(this.t) * this.scale + width/2 + wobbleX;
+                const targetY = heartY(this.t) * this.scale + height/2 + centerOffsetY + wobbleY;
+
+                const dx = targetX - this.x;
+                const dy = targetY - this.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                const speed = 5 * (width / 1920);
+                this.x += (dx / distance) * speed;
+                this.y += (dy / distance) * speed;
+
+                this.t += this.speed * (0.8 + Math.sin(this.phase) * 0.4);
+                if (this.t > Math.PI * 2) this.t = 0;
+            }
+
+            draw() {
+                if (!this.active || this.history.length < 2) return;
+
+                ctx.beginPath();
+                ctx.moveTo(this.history[0].x, this.history[0].y);
+                
+                for (let i = 1; i < this.history.length; i++) {
+                    const p0 = this.history[i-1];
+                    const p1 = this.history[i];
+                    const xc = (p0.x + p1.x) * 0.5;
+                    const yc = (p0.y + p1.y) * 0.5;
+                    ctx.quadraticCurveTo(p0.x, p0.y, xc, yc);
+                }
+
+                const gradient = ctx.createLinearGradient(
+                    this.history[0].x, this.history[0].y,
+                    this.x, this.y
+                );
+                
+                const startAlpha = 0.14 * this.fadeState;
+                const endAlpha = 0.45 * this.fadeState;
+                
+                gradient.addColorStop(0, `hsla(${this.baseHue}, ${this.saturation}%, ${this.lightness}%, ${startAlpha})`);
+                gradient.addColorStop(1, `hsla(${this.baseHue}, ${this.saturation}%, ${this.lightness}%, ${endAlpha})`);
+                
+                ctx.strokeStyle = gradient;
+                ctx.lineWidth = (this.size + 1) * (0.75 + Math.sin(this.phase) * 0.2);
+                ctx.lineCap = 'round';
+                ctx.stroke();
+
+                ctx.shadowColor = `hsla(${this.baseHue}, ${this.saturation}%, ${this.lightness}%, ${endAlpha})`;
+                ctx.shadowBlur = this.glow * this.fadeState;
+                
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size * (1.2 + Math.sin(this.phase) * 0.25), 0, Math.PI * 2);
+                ctx.fillStyle = `hsla(${this.baseHue}, ${this.saturation}%, ${this.lightness}%, ${endAlpha * 1.2})`;
+                ctx.fill();
+            }
+        }
+
         const particles = [];
-        const numParticles = 450; // Reduced base particles
+        const numParticles = 400;
         let extraParticles = [];
         let isShaking = false;
         let shakeIntensity = 0;
@@ -181,50 +347,12 @@
         let lastParticleBurst = 0;
         let backgroundOpacity = 0;
         let lastFrameTime = 0;
-        let frameCount = 0;
+        const FRAME_RATE = 1000 / 60; // Target 60 FPS
         const totalSpawnDuration = 4000;
         const spawnInterval = totalSpawnDuration / numParticles;
-        const MAX_EXTRA_PARTICLES = 200; // Further reduced max extra particles
-        const PARTICLE_BURST_INTERVAL = 200; // Increased burst interval
-        const PARTICLE_BURST_COUNT = 20; // Reduced burst count
-        const CHUNK_SIZE = 100; // Increased chunk size for better batching
-        
-        // Pre-calculate some values
-        const TWO_PI = Math.PI * 2;
-        const SHAKE_DECAY = Math.pow(0.9, 1/16); // Pre-calculate for performance
-
-        // Optimization: Create a particle pool
-        const particlePool = {
-            pool: [],
-            maxSize: 300,
-            
-            init() {
-                for (let i = 0; i < 100; i++) {
-                    this.pool.push(new Particle(1, 0)); // Scale will be updated when used
-                }
-            },
-            
-            get(scale) {
-                let particle;
-                if (this.pool.length > 0) {
-                    particle = this.pool.pop();
-                    particle.scale = scale;
-                    particle.reset(false);
-                } else {
-                    particle = new Particle(scale, 0);
-                }
-                return particle;
-            },
-            
-            release(particle) {
-                if (this.pool.length < this.maxSize) {
-                    this.pool.push(particle);
-                }
-            }
-        };
-
-        // Initialize particle pool
-        particlePool.init();
+        const MAX_EXTRA_PARTICLES = 300; // Limit max extra particles
+        const PARTICLE_BURST_INTERVAL = 150; // Increased from 100ms to 150ms
+        const PARTICLE_BURST_COUNT = 30; // Reduced from 50
 
         function startShakeEffect() {
             isPressed = true;
@@ -247,71 +375,86 @@
 
         function addParticleBurst() {
             const currentTime = performance.now();
+            // Add new particles with controlled interval
             if (currentTime - lastParticleBurst < PARTICLE_BURST_INTERVAL) return;
             
             lastParticleBurst = currentTime;
+            
+            // Add burst of particles
             const scale = window.heartConfig.scale;
             
-            // Remove excess particles first
+            // Remove old particles if we have too many
             if (extraParticles.length > MAX_EXTRA_PARTICLES) {
-                const removeCount = extraParticles.length - MAX_EXTRA_PARTICLES;
-                for (let i = 0; i < removeCount; i++) {
-                    particlePool.release(extraParticles[i]);
-                }
-                extraParticles = extraParticles.slice(removeCount);
+                extraParticles = extraParticles.slice(-MAX_EXTRA_PARTICLES);
             }
             
-            // Add new particles from pool
-            const newParticles = new Array(PARTICLE_BURST_COUNT);
+            // Create particles in batch
+            const newParticles = [];
             for (let i = 0; i < PARTICLE_BURST_COUNT; i++) {
-                const particle = particlePool.get(scale);
+                const particle = new Particle(scale, 0);
                 particle.active = true;
                 particle.speed *= 1.5;
                 particle.glow *= 1.5;
                 particle.size *= 1.2;
                 particle.amplitude *= 1.5;
-                newParticles[i] = particle;
+                newParticles.push(particle);
             }
-            
             extraParticles = extraParticles.concat(newParticles);
         }
 
-        // Optimization: Cache common Math operations
-        function fastRandom() {
-            return Math.random();
-        }
+        function updateBackground(ctx, width, height) {
+            // Update background opacity with frame rate control
+            const opacityStep = isPressed ? 0.05 : 0.03;
+            if (isPressed && backgroundOpacity < 1) {
+                backgroundOpacity = Math.min(1, backgroundOpacity + opacityStep);
+            } else if (!isPressed && backgroundOpacity > 0) {
+                backgroundOpacity = Math.max(0, backgroundOpacity - opacityStep);
+            }
 
-        function fastCos(x) {
-            return Math.cos(x);
-        }
-
-        function fastSin(x) {
-            return Math.sin(x);
+            if (backgroundOpacity > 0) {
+                // Cache gradient parameters
+                const centerX = width/2;
+                const centerY = height/2;
+                const radius = Math.max(width, height);
+                
+                const gradient = ctx.createRadialGradient(
+                    centerX, centerY, 0,
+                    centerX, centerY, radius
+                );
+                
+                const alpha1 = 0.3 * backgroundOpacity;
+                const alpha2 = 0.2 * backgroundOpacity;
+                const alpha3 = 0.1 * backgroundOpacity;
+                
+                gradient.addColorStop(0, `rgba(255, 0, 50, ${alpha1})`);
+                gradient.addColorStop(0.5, `rgba(180, 0, 35, ${alpha2})`);
+                gradient.addColorStop(1, `rgba(100, 0, 20, ${alpha3})`);
+                
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, width, height);
+            }
         }
 
         function updateShake(time) {
             if (!isShaking) return { offsetX: 0, offsetY: 0 };
 
-            const deltaTime = Math.min(time - lastFrameTime, 32) / 16;
-
             if (isPressed) {
-                shakeIntensity = Math.min(shakeIntensity + 0.5 * deltaTime, 15); // Reduced max intensity
-                if (time - lastParticleBurst >= PARTICLE_BURST_INTERVAL) {
-                    addParticleBurst();
-                }
+                // Optimize shake calculations
+                shakeIntensity = Math.min(shakeIntensity + 0.5, 15); // Reduced max intensity
+                addParticleBurst();
             } else {
-                shakeIntensity *= Math.pow(SHAKE_DECAY, deltaTime);
+                shakeIntensity *= 0.9;
                 if (shakeIntensity < 0.1) {
                     isShaking = false;
                     return { offsetX: 0, offsetY: 0 };
                 }
             }
             
-            const angle = fastRandom() * TWO_PI;
-            const radius = fastRandom() * shakeIntensity;
+            // Optimize random calculations
+            const intensity = shakeIntensity * 0.8; // Reduced intensity multiplier
             return {
-                offsetX: fastCos(angle) * radius,
-                offsetY: fastSin(angle) * radius
+                offsetX: (Math.random() - 0.5) * intensity,
+                offsetY: (Math.random() - 0.5) * intensity
             };
         }
 
@@ -347,83 +490,57 @@
         }
 
         function animate(time) {
-            frameCount++;
-            
-            if (!animationStartTime) {
-                animationStartTime = time;
-                lastFrameTime = time;
-            }
-
-            const deltaTime = time - lastFrameTime;
-            // Adaptive frame skipping based on performance
-            if (deltaTime < 16 || (frameCount % 2 === 0 && deltaTime < 32)) {
+            // Frame rate control
+            const elapsed = time - lastFrameTime;
+            if (elapsed < FRAME_RATE) {
                 requestAnimationFrame(animate);
                 return;
+            }
+            lastFrameTime = time - (elapsed % FRAME_RATE);
+
+            if (!animationStartTime) {
+                animationStartTime = time;
             }
 
             const width = canvas.width / dpr;
             const height = canvas.height / dpr;
 
-            // Batch clear and background operations
             ctx.clearRect(0, 0, width, height);
             
-            if (backgroundOpacity > 0) {
-                ctx.globalAlpha = backgroundOpacity;
-                ctx.fillStyle = this.cachedGradient || (() => {
-                    const gradient = ctx.createRadialGradient(
-                        width/2, height/2, 0,
-                        width/2, height/2, Math.max(width, height)
-                    );
-                    gradient.addColorStop(0, 'rgba(255, 0, 50, 0.3)');
-                    gradient.addColorStop(0.5, 'rgba(180, 0, 35, 0.2)');
-                    gradient.addColorStop(1, 'rgba(100, 0, 20, 0.1)');
-                    this.cachedGradient = gradient;
-                    return gradient;
-                })();
-                ctx.fillRect(0, 0, width, height);
-                ctx.globalAlpha = 1;
-            }
-
-            ctx.fillStyle = `rgba(0, 0, 0, ${isPressed ? 0.1 : 0.2})`;
+            // Update and draw background
+            updateBackground(ctx, width, height);
+            
+            // Optimized motion blur
+            ctx.fillStyle = `rgba(0, 0, 0, ${isPressed ? 0.1 : 0.15})`;
             ctx.fillRect(0, 0, width, height);
 
+            // Get shake offset
             const { offsetX, offsetY } = updateShake(time);
             
-            // Batch all particle operations
+            // Apply shake transform
             ctx.save();
             ctx.translate(offsetX, offsetY);
 
-            // Update particles in larger chunks
-            const regularParticlesLength = particles.length;
-            const extraParticlesLength = extraParticles.length;
-
-            // Process particles in larger chunks with frame skipping
-            for (let i = 0; i < regularParticlesLength; i += CHUNK_SIZE) {
-                const endIdx = Math.min(i + CHUNK_SIZE, regularParticlesLength);
-                for (let j = i; j < endIdx; j++) {
-                    const particle = particles[j];
-                    if ((frameCount + j) % 3 === 0) { // More aggressive frame skipping
-                        particle.update(time);
-                    }
-                    particle.draw();
+            // Batch process regular particles with optimized update frequency
+            const len = particles.length;
+            const updateInterval = isPressed ? 3 : 2; // Update fewer particles when pressed
+            for (let i = 0; i < len; i++) {
+                const particle = particles[i];
+                if (i % updateInterval === 0) {
+                    particle.update(time);
                 }
+                particle.draw();
             }
 
-            // Process extra particles
-            for (let i = 0; i < extraParticlesLength; i += CHUNK_SIZE) {
-                const endIdx = Math.min(i + CHUNK_SIZE, extraParticlesLength);
-                for (let j = i; j < endIdx; j++) {
-                    const particle = extraParticles[j];
-                    if ((frameCount + j) % 2 === 0) { // Frame skipping for extra particles
-                        particle.update(time);
-                    }
-                    particle.draw();
-                }
+            // Process extra particles with optimized batching
+            const extraLen = extraParticles.length;
+            for (let i = 0; i < extraLen; i += 2) { // Update every other particle
+                const particle = extraParticles[i];
+                particle.update(time);
+                particle.draw();
             }
 
             ctx.restore();
-            
-            lastFrameTime = time;
             requestAnimationFrame(animate);
         }
 
@@ -459,7 +576,7 @@
             stopShakeEffect();
         });
 
-        // Initialize
+        // Initialize with optimized particle count
         initParticles();
         animate(0);
         animateSpace();
