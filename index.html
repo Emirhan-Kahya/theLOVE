@@ -529,26 +529,66 @@
             if (textOpacity > 0) {
                 ctx.save();
                 
+                // Calculate responsive sizes based on screen orientation
+                const isPortrait = height > width;
+                const smallerDimension = Math.min(width, height);
+                const largerDimension = Math.max(width, height);
+                
+                // Responsive font size calculation with smaller text for small screens
+                let fontSize;
+                if (isPortrait) {
+                    if (width < 600) {
+                        fontSize = width * 0.08; // Much smaller on mobile
+                    } else {
+                        fontSize = width * 0.12;
+                    }
+                    // Prevent text from being too large on tall narrow screens
+                    if (fontSize > height * 0.08) {
+                        fontSize = height * 0.08;
+                    }
+                } else {
+                    if (width < 1024) {
+                        fontSize = height * 0.1; // Smaller on small landscape screens
+                    } else {
+                        fontSize = height * 0.12;
+                    }
+                    // Prevent text from being too large on wide screens
+                    if (fontSize > width * 0.08) {
+                        fontSize = width * 0.08;
+                    }
+                }
+                
+                // Calculate text position
+                const textY = isPortrait 
+                    ? height * 0.3 // Position text higher in portrait mode
+                    : height * 0.35; // Slightly lower in landscape mode
+                
                 // Draw image if loaded
                 if (imageLoaded) {
-                    const imageSize = Math.min(width, height) * 0.3; // Adjust size as needed
+                    // Responsive image size
+                    const imageSize = isPortrait 
+                        ? width * 0.7 // Slightly smaller in portrait
+                        : height * 0.35; // Smaller in landscape
+                    
                     const aspectRatio = customImage.width / customImage.height;
                     const imageWidth = imageSize * aspectRatio;
-                    const imageHeight = imageSize;
+                    const imageHeight = imageSize / aspectRatio;
                     
-                    // Position image below text with more space
-                    const imageY = height/2 + Math.min(width, height) * 0.05; // Reduced gap for better composition
+                    // Responsive image position
+                    const imageY = isPortrait
+                        ? height * 0.5 // Center in portrait
+                        : height * 0.6; // Lower in landscape
                     
-                    // Add fade-in effect for image
                     ctx.globalAlpha = textOpacity;
-                    
-                    // Draw image with rounded corners
                     ctx.save();
-                    const cornerRadius = 10;
                     
-                    // Create rounded rectangle path
+                    // Responsive corner radius
+                    const cornerRadius = smallerDimension * 0.02;
+                    
                     const x = width/2 - imageWidth/2;
                     const y = imageY - imageHeight/2;
+                    
+                    // Draw rounded rectangle for image
                     ctx.beginPath();
                     ctx.moveTo(x + cornerRadius, y);
                     ctx.lineTo(x + imageWidth - cornerRadius, y);
@@ -561,30 +601,32 @@
                     ctx.quadraticCurveTo(x, y, x + cornerRadius, y);
                     ctx.closePath();
                     
+                    // Responsive glow effect
                     ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
-                    ctx.shadowBlur = 15;
+                    ctx.shadowBlur = smallerDimension * 0.02;
                     
                     ctx.clip();
-                    
-                    ctx.drawImage(customImage, 
-                        x, y, 
-                        imageWidth, imageHeight
-                    );
-                    
+                    ctx.drawImage(customImage, x, y, imageWidth, imageHeight);
                     ctx.restore();
                 }
                 
-                // Draw text higher up
+                // Draw text with responsive styling
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
-                ctx.shadowBlur = 20;
+                ctx.shadowBlur = fontSize * 0.15; // Responsive glow
                 
-                const fontSize = Math.min(width, height) * 0.15;
                 ctx.font = `bold ${fontSize}px Arial`;
                 ctx.fillStyle = `rgba(255, 255, 255, ${textOpacity})`;
-                // Move text up by 20% of screen height
-                ctx.fillText('I LOVE YOU NA', width/2, height/2 - Math.min(width, height) * 0.2);
+                
+                // Break text into multiple lines for portrait mode
+                if (isPortrait && width < 600) {
+                    const lineSpacing = fontSize * 1.2; // Slightly more space between lines
+                    ctx.fillText('I LOVE', width/2, textY - lineSpacing/2);
+                    ctx.fillText('YOU NA', width/2, textY + lineSpacing/2);
+                } else {
+                    ctx.fillText('I LOVE YOU NA', width/2, textY);
+                }
                 
                 ctx.restore();
             }
