@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>the LOVE</title>
+    <title>Romantic Heart Lines</title>
     <style>
         * {
             margin: 0;
@@ -132,6 +132,14 @@
         let dpr = setupCanvas(canvas);
         ctx.scale(dpr, dpr);
 
+        // Add image loading
+        const customImage = new Image();
+        customImage.src = 'us.jpeg'; // You can change this to your image path
+        let imageLoaded = false;
+        customImage.onload = function() {
+            imageLoaded = true;
+        };
+
         function heartX(t) {
             return 16 * Math.pow(Math.sin(t), 3);
         }
@@ -187,6 +195,10 @@
                 this.fadeState = 1;
                 this.lastX = 0;
                 this.lastY = 0;
+                this.explosionVelocityX = 0;
+                this.explosionVelocityY = 0;
+                this.explosionRotation = 0;
+                this.explosionScale = 1;
             }
 
             reset(isInitial = false) {
@@ -344,18 +356,29 @@
         let shakeIntensity = 0;
         let lastShakeTime = 0;
         let isPressed = false;
+        let pressStartTime = 0;
         let lastParticleBurst = 0;
         let backgroundOpacity = 0;
         let lastFrameTime = 0;
-        const FRAME_RATE = 1000 / 60; // Target 60 FPS
+        let tearProgress = 0;
+        let isTearing = false;
+        let textOpacity = 0;
+        let isDisappearing = false;
+        let disappearProgress = 0;
+        const FRAME_RATE = 1000 / 60;
+        const TEAR_START_TIME = 2000;
+        const TEAR_DURATION = 2000;
+        const DISAPPEAR_START_TEAR = 0.8; // Start disappearing at 80% tear
+        const TEXT_APPEAR_DELAY = 500; // Delay before text appears after disappearing starts
         const totalSpawnDuration = 4000;
         const spawnInterval = totalSpawnDuration / numParticles;
-        const MAX_EXTRA_PARTICLES = 300; // Limit max extra particles
-        const PARTICLE_BURST_INTERVAL = 150; // Increased from 100ms to 150ms
-        const PARTICLE_BURST_COUNT = 30; // Reduced from 50
+        const MAX_EXTRA_PARTICLES = 300;
+        const PARTICLE_BURST_INTERVAL = 150;
+        const PARTICLE_BURST_COUNT = 30;
 
         function startShakeEffect() {
             isPressed = true;
+            pressStartTime = performance.now();
             isShaking = true;
             shakeIntensity = 20;
             lastShakeTime = performance.now();
@@ -363,8 +386,31 @@
         }
 
         function stopShakeEffect() {
-            isPressed = false;
-            // Let the shake gradually fade out
+            if (tearProgress < DISAPPEAR_START_TEAR) {
+                isPressed = false;
+                pressStartTime = 0;
+                isTearing = false;
+                isDisappearing = false;
+                textOpacity = 0;
+                
+                // Reset tear progress slowly
+                const currentTear = tearProgress;
+                const resetDuration = 1000;
+                const startTime = performance.now();
+                
+                function resetTear() {
+                    const elapsed = performance.now() - startTime;
+                    const progress = Math.min(1, elapsed / resetDuration);
+                    tearProgress = currentTear * (1 - progress);
+                    
+                    if (progress < 1) {
+                        requestAnimationFrame(resetTear);
+                    }
+                }
+                
+                resetTear();
+            }
+            
             setTimeout(() => {
                 if (!isPressed) {
                     isShaking = false;
@@ -375,21 +421,16 @@
 
         function addParticleBurst() {
             const currentTime = performance.now();
-            // Add new particles with controlled interval
             if (currentTime - lastParticleBurst < PARTICLE_BURST_INTERVAL) return;
             
             lastParticleBurst = currentTime;
             
-            // Add burst of particles
             const scale = window.heartConfig.scale;
             
-            // Remove old particles if we have too many
             if (extraParticles.length > MAX_EXTRA_PARTICLES) {
                 extraParticles = extraParticles.slice(-MAX_EXTRA_PARTICLES);
             }
             
-            // Create particles in batch
-            const newParticles = [];
             for (let i = 0; i < PARTICLE_BURST_COUNT; i++) {
                 const particle = new Particle(scale, 0);
                 particle.active = true;
@@ -397,13 +438,32 @@
                 particle.glow *= 1.5;
                 particle.size *= 1.2;
                 particle.amplitude *= 1.5;
-                newParticles.push(particle);
+                extraParticles.push(particle);
             }
-            extraParticles = extraParticles.concat(newParticles);
+        }
+
+        function updateShake(time) {
+            if (!isShaking) return { offsetX: 0, offsetY: 0 };
+
+            if (isPressed) {
+                shakeIntensity = Math.min(shakeIntensity + 0.5, 15);
+                addParticleBurst();
+            } else {
+                shakeIntensity *= 0.9;
+                if (shakeIntensity < 0.1) {
+                    isShaking = false;
+                    return { offsetX: 0, offsetY: 0 };
+                }
+            }
+            
+            const intensity = shakeIntensity * 0.8;
+            return {
+                offsetX: (Math.random() - 0.5) * intensity,
+                offsetY: (Math.random() - 0.5) * intensity
+            };
         }
 
         function updateBackground(ctx, width, height) {
-            // Update background opacity with frame rate control
             const opacityStep = isPressed ? 0.05 : 0.03;
             if (isPressed && backgroundOpacity < 1) {
                 backgroundOpacity = Math.min(1, backgroundOpacity + opacityStep);
@@ -412,7 +472,6 @@
             }
 
             if (backgroundOpacity > 0) {
-                // Cache gradient parameters
                 const centerX = width/2;
                 const centerY = height/2;
                 const radius = Math.max(width, height);
@@ -433,29 +492,6 @@
                 ctx.fillStyle = gradient;
                 ctx.fillRect(0, 0, width, height);
             }
-        }
-
-        function updateShake(time) {
-            if (!isShaking) return { offsetX: 0, offsetY: 0 };
-
-            if (isPressed) {
-                // Optimize shake calculations
-                shakeIntensity = Math.min(shakeIntensity + 0.5, 15); // Reduced max intensity
-                addParticleBurst();
-            } else {
-                shakeIntensity *= 0.9;
-                if (shakeIntensity < 0.1) {
-                    isShaking = false;
-                    return { offsetX: 0, offsetY: 0 };
-                }
-            }
-            
-            // Optimize random calculations
-            const intensity = shakeIntensity * 0.8; // Reduced intensity multiplier
-            return {
-                offsetX: (Math.random() - 0.5) * intensity,
-                offsetY: (Math.random() - 0.5) * intensity
-            };
         }
 
         function initParticles() {
@@ -489,8 +525,148 @@
             }
         }
 
+        function drawText(ctx, width, height) {
+            if (textOpacity > 0) {
+                ctx.save();
+                
+                // Draw image if loaded
+                if (imageLoaded) {
+                    const imageSize = Math.min(width, height) * 0.3; // Adjust size as needed
+                    const aspectRatio = customImage.width / customImage.height;
+                    const imageWidth = imageSize * aspectRatio;
+                    const imageHeight = imageSize;
+                    
+                    // Position image below text with more space
+                    const imageY = height/2 + Math.min(width, height) * 0.05; // Reduced gap for better composition
+                    
+                    // Add fade-in effect for image
+                    ctx.globalAlpha = textOpacity;
+                    
+                    // Draw image with rounded corners
+                    ctx.save();
+                    const cornerRadius = 10;
+                    
+                    // Create rounded rectangle path
+                    const x = width/2 - imageWidth/2;
+                    const y = imageY - imageHeight/2;
+                    ctx.beginPath();
+                    ctx.moveTo(x + cornerRadius, y);
+                    ctx.lineTo(x + imageWidth - cornerRadius, y);
+                    ctx.quadraticCurveTo(x + imageWidth, y, x + imageWidth, y + cornerRadius);
+                    ctx.lineTo(x + imageWidth, y + imageHeight - cornerRadius);
+                    ctx.quadraticCurveTo(x + imageWidth, y + imageHeight, x + imageWidth - cornerRadius, y + imageHeight);
+                    ctx.lineTo(x + cornerRadius, y + imageHeight);
+                    ctx.quadraticCurveTo(x, y + imageHeight, x, y + imageHeight - cornerRadius);
+                    ctx.lineTo(x, y + cornerRadius);
+                    ctx.quadraticCurveTo(x, y, x + cornerRadius, y);
+                    ctx.closePath();
+                    
+                    ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
+                    ctx.shadowBlur = 15;
+                    
+                    ctx.clip();
+                    
+                    ctx.drawImage(customImage, 
+                        x, y, 
+                        imageWidth, imageHeight
+                    );
+                    
+                    ctx.restore();
+                }
+                
+                // Draw text higher up
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.shadowColor = 'rgba(255, 255, 255, 0.8)';
+                ctx.shadowBlur = 20;
+                
+                const fontSize = Math.min(width, height) * 0.15;
+                ctx.font = `bold ${fontSize}px Arial`;
+                ctx.fillStyle = `rgba(255, 255, 255, ${textOpacity})`;
+                // Move text up by 20% of screen height
+                ctx.fillText('I LOVE YOU NA', width/2, height/2 - Math.min(width, height) * 0.2);
+                
+                ctx.restore();
+            }
+        }
+
+        function updateParticleWithTear(particle, time) {
+            if (isTearing) {
+                // Calculate particle's position in the heart
+                const heartCenterX = canvas.width / (2 * dpr);
+                const heartCenterY = canvas.height / (2 * dpr);
+                const dx = particle.x - heartCenterX;
+                const dy = particle.y - heartCenterY;
+                const angle = Math.atan2(dy, dx);
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                // Create tear effect based on angle
+                const tearAngle = Math.PI / 2;
+                const angleDiff = Math.abs(angle - tearAngle);
+                const tearInfluence = Math.pow(Math.cos(angleDiff), 2) * tearProgress;
+                
+                // Move particles away from tear line
+                const tearOffset = 50 * tearInfluence;
+                if (dx > 0) {
+                    particle.x += tearOffset;
+                } else {
+                    particle.x -= tearOffset;
+                }
+                
+                // Add some vertical scatter
+                particle.y += (Math.random() - 0.5) * tearOffset * 0.2;
+                
+                // Add rotation and wobble to torn particles
+                particle.rotation = (particle.rotation || 0) + 0.02 * tearInfluence;
+                const wobble = Math.sin(time * 0.005 + particle.rotation) * 2 * tearInfluence;
+                particle.x += wobble;
+
+                // Handle disappearing effect with enhanced explosion
+                if (isDisappearing) {
+                    // Initialize explosion velocities if not set
+                    if (!particle.explosionVelocityX) {
+                        const explosionAngle = Math.random() * Math.PI * 2;
+                        const explosionSpeed = 2 + Math.random() * 8;
+                        particle.explosionVelocityX = Math.cos(explosionAngle) * explosionSpeed;
+                        particle.explosionVelocityY = Math.sin(explosionAngle) * explosionSpeed;
+                        particle.explosionRotation = (Math.random() - 0.5) * 0.2;
+                        particle.explosionScale = 0.5 + Math.random() * 1;
+                    }
+
+                    // Apply explosion physics
+                    particle.x += particle.explosionVelocityX * disappearProgress * 15;
+                    particle.y += particle.explosionVelocityY * disappearProgress * 15;
+                    
+                    // Add gravity effect
+                    particle.explosionVelocityY += 0.1;
+                    
+                    // Update rotation and scale during explosion
+                    particle.rotation = (particle.rotation || 0) + particle.explosionRotation;
+                    particle.size *= 0.99; // Gradually decrease particle size
+                    
+                    // Add some turbulence
+                    particle.x += Math.sin(time * 0.01 + particle.phase) * disappearProgress * 2;
+                    particle.y += Math.cos(time * 0.01 + particle.phase) * disappearProgress * 2;
+                    
+                    // Enhanced trail effect during explosion
+                    particle.maxHistory = Math.floor(30 + Math.random() * 20);
+                    particle.glow *= 1.01; // Increase glow during explosion
+                    
+                    // Fade out based on distance from center and disappear progress
+                    const distanceFromCenter = Math.sqrt(
+                        Math.pow(particle.x - heartCenterX, 2) + 
+                        Math.pow(particle.y - heartCenterY, 2)
+                    );
+                    const maxDistance = Math.max(canvas.width, canvas.height) / 2;
+                    const distanceFade = Math.max(0, 1 - (distanceFromCenter / maxDistance));
+                    particle.fadeState = Math.max(0, distanceFade * (1 - disappearProgress));
+                }
+            }
+            
+            particle.update(time);
+        }
+
         function animate(time) {
-            // Frame rate control
             const elapsed = time - lastFrameTime;
             if (elapsed < FRAME_RATE) {
                 requestAnimationFrame(animate);
@@ -502,45 +678,85 @@
                 animationStartTime = time;
             }
 
+            // Update tear and disappear progress
+            if (isPressed) {
+                const pressDuration = time - pressStartTime;
+                if (pressDuration > TEAR_START_TIME) {
+                    isTearing = true;
+                    tearProgress = Math.min(1, (pressDuration - TEAR_START_TIME) / TEAR_DURATION);
+                    
+                    // Start disappearing effect
+                    if (tearProgress >= DISAPPEAR_START_TEAR) {
+                        isDisappearing = true;
+                        disappearProgress = Math.min(1, (tearProgress - DISAPPEAR_START_TEAR) / (1 - DISAPPEAR_START_TEAR));
+                        
+                        // Fade in text
+                        if (disappearProgress > 0.3) {
+                            textOpacity = Math.min(1, (disappearProgress - 0.3) / 0.7);
+                        }
+                    }
+                }
+            }
+
             const width = canvas.width / dpr;
             const height = canvas.height / dpr;
 
+            // Clear the entire canvas
             ctx.clearRect(0, 0, width, height);
             
-            // Update and draw background
+            // Update background
             updateBackground(ctx, width, height);
             
-            // Optimized motion blur
+            // Add fade effect
             ctx.fillStyle = `rgba(0, 0, 0, ${isPressed ? 0.1 : 0.15})`;
             ctx.fillRect(0, 0, width, height);
 
-            // Get shake offset
+            // Get shake offset for particles only
             const { offsetX, offsetY } = updateShake(time);
             
-            // Apply shake transform
+            // Apply shake ONLY to particle layer
             ctx.save();
             ctx.translate(offsetX, offsetY);
 
-            // Batch process regular particles with optimized update frequency
-            const len = particles.length;
-            const updateInterval = isPressed ? 3 : 2; // Update fewer particles when pressed
-            for (let i = 0; i < len; i++) {
-                const particle = particles[i];
-                if (i % updateInterval === 0) {
-                    particle.update(time);
+            // Only draw particles if not fully disappeared
+            if (!isDisappearing || disappearProgress < 1) {
+                const len = particles.length;
+                const updateInterval = isPressed ? 3 : 2;
+                for (let i = 0; i < len; i++) {
+                    const particle = particles[i];
+                    if (i % updateInterval === 0) {
+                        updateParticleWithTear(particle, time);
+                    }
+                    
+                    if (isTearing && particle.rotation) {
+                        ctx.save();
+                        ctx.translate(particle.x, particle.y);
+                        ctx.rotate(particle.rotation);
+                        ctx.translate(-particle.x, -particle.y);
+                    }
+                    
+                    particle.draw();
+                    
+                    if (isTearing && particle.rotation) {
+                        ctx.restore();
+                    }
                 }
-                particle.draw();
+
+                extraParticles.forEach(particle => {
+                    updateParticleWithTear(particle, time);
+                    particle.draw();
+                });
             }
 
-            // Process extra particles with optimized batching
-            const extraLen = extraParticles.length;
-            for (let i = 0; i < extraLen; i += 2) { // Update every other particle
-                const particle = extraParticles[i];
-                particle.update(time);
-                particle.draw();
-            }
-
+            // Restore context to remove shake transform
             ctx.restore();
+
+            // Draw text in a completely separate layer without any transforms
+            ctx.save();
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // Reset all transforms
+            drawText(ctx, width, height);
+            ctx.restore();
+
             requestAnimationFrame(animate);
         }
 
@@ -557,12 +773,10 @@
         // Event listeners
         window.addEventListener('resize', handleResize);
 
-        // Add interaction listeners for mouse
         canvas.addEventListener('mousedown', startShakeEffect);
         canvas.addEventListener('mouseup', stopShakeEffect);
         canvas.addEventListener('mouseleave', stopShakeEffect);
 
-        // Add interaction listeners for touch
         canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
             startShakeEffect();
@@ -576,7 +790,6 @@
             stopShakeEffect();
         });
 
-        // Initialize with optimized particle count
         initParticles();
         animate(0);
         animateSpace();
